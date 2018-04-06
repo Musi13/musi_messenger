@@ -9,6 +9,7 @@ import requests
 import select
 import json
 import base64
+import time
 
 KNS = 'http://127.0.0.1:1234/{pk_hash}'
 keyfile = None
@@ -16,6 +17,7 @@ certfile = None
 
 sessions = {} # Dict of public hash to socket
 
+rev_sessions = {}
 
 def connect_to_host_port(host, port):
     '''
@@ -82,6 +84,8 @@ def connect_to_peer(pk_hash):
             return False
 
         sessions[pk_hash] = sock
+        rev_sessions[sock] = pk_hash
+        print('Started conversation with {0}.'.format(pk_hash))
         return True
 
 
@@ -116,13 +120,15 @@ def server_handle_client(sock, address):
         sock.close()
 
     sessions[client_hash] = sock
+    rev_sessions[sock] = client_hash
+    print('{0} started a conversation with you.'.format(client_hash))
 
 
 def register(pk_hash, host, port):
     r = requests.post(KNS.format(pk_hash=pk_hash), data={'method': 'set', 'host': host, 'port': port})
-    print(r.text)
-    r = requests.get(KNS.format(pk_hash=pk_hash))
-    print(r.text)
+    #print(r.text)
+    #r = requests.get(KNS.format(pk_hash=pk_hash))
+    #print(r.text)
 
 
 def listen_for_connections(host, port):
@@ -147,13 +153,55 @@ def listen_for_connections(host, port):
         handle_thread = Thread(target=server_handle_client, args=(clientsock, address))
         handle_thread.start()
 
+def read_messages():
+    '''
+    Loops through sessions and prints any new messages
+    Run this in a new thread
+    '''
+    while True:
+        if len(sessions.values()) > 0:
+            readable, writable, errored = select.select(sessions.values(), [], [], 10)
+            for sock in readable:
+                msg = str(sock.recv(1024), encoding='utf-8')
+                if len(msg) != 0:
+                    print('{0}: {1}'.format(rev_sessions[sock], msg))
+                else:
+                    sock.close()
+                    del sessions[rev_sessions[sock]]
+                    del rev_sessions[sock]
+        else:
+            time.sleep(10)
+
+
 def print_sessions():
     print(sessions)
+
+
+def send_message(pk_hash, *msg_split):
+    if pk_hash in sessions and len(msg_split) > 0:
+        sessions[pk_hash].send(' '.join(msg_split).encode('utf-8'))
+        print('Message Sent')
+
+
+def close_session(pk_hash):
+    if pk_hash in sessions:
+        sessions[pk_hash].close()
+        del rev_sessions[sessions[pk_hash]]
+        del sessions[pk_hash]
+
+
+def shutdown():
+    for sock in sessions.values():
+        sock.close()
+    exit()
+
 
 command_list = {
     '/connect': connect_to_peer,
     '/sessions': print_sessions,
-    '/exit': exit
+    '/exit': shutdown,
+    '/m': send_message,
+    '/c': close_session
 }
 
 
@@ -183,6 +231,9 @@ if __name__ == '__main__':
 
     listen_thread = Thread(target=listen_for_connections, args=(args.host, args.port), daemon=True)
     listen_thread.start()
+
+    read_thread = Thread(target=read_messages, daemon=True)
+    read_thread.start()
 
     register(pk_hash, args.host, args.port)
 
