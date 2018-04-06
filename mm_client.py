@@ -15,9 +15,11 @@ KNS = 'http://127.0.0.1:1234/{pk_hash}'
 keyfile = None
 certfile = None
 
-sessions = {} # Dict of public hash to socket
-
+sessions = {}  # Dict of public hash to socket
 rev_sessions = {}
+
+nicks = {}
+rev_nicks = {}
 
 def connect_to_host_port(host, port):
     '''
@@ -34,11 +36,12 @@ def connect_to_host_port(host, port):
     return wrap
 
 
-def connect_to_peer(pk_hash):
+def connect_to_peer(peer):
     '''
     Given a pk_hash, add an SSLSocket to the peer to the sessions dict if possible.
     Returns True if added, False otherwise
     '''
+    pk_hash = nick_to_pk_hash(peer)
     r = requests.get(KNS.format(pk_hash=pk_hash))
     if r.status_code != 200:
         print('Could not get peer address')
@@ -85,7 +88,7 @@ def connect_to_peer(pk_hash):
 
         sessions[pk_hash] = sock
         rev_sessions[sock] = pk_hash
-        print('Started conversation with {0}.'.format(pk_hash))
+        print('Started conversation with {0}.'.format(pk_hash_to_nick(pk_hash)))
         return True
 
 
@@ -121,7 +124,7 @@ def server_handle_client(sock, address):
 
     sessions[client_hash] = sock
     rev_sessions[sock] = client_hash
-    print('{0} started a conversation with you.'.format(client_hash))
+    print('{0} started a conversation with you.'.format(pk_hash_to_nick(client_hash)))
 
 
 def register(pk_hash, host, port):
@@ -164,7 +167,7 @@ def read_messages():
             for sock in readable:
                 msg = str(sock.recv(1024), encoding='utf-8')
                 if len(msg) != 0:
-                    print('{0}: {1}'.format(rev_sessions[sock], msg))
+                    print('{0}: {1}'.format(pk_hash_to_nick(rev_sessions[sock]), msg))
                 else:
                     sock.close()
                     del sessions[rev_sessions[sock]]
@@ -177,7 +180,8 @@ def print_sessions():
     print(sessions)
 
 
-def send_message(pk_hash, *msg_split):
+def send_message(recipient, *msg_split):
+    pk_hash = nick_to_pk_hash(recipient)
     if pk_hash in sessions and len(msg_split) > 0:
         sessions[pk_hash].send(' '.join(msg_split).encode('utf-8'))
         print('Message Sent')
@@ -188,6 +192,27 @@ def close_session(pk_hash):
         sessions[pk_hash].close()
         del rev_sessions[sessions[pk_hash]]
         del sessions[pk_hash]
+
+
+def pk_hash_to_nick(pk_hash):
+    if pk_hash in nicks:
+        return nicks[pk_hash]
+    return pk_hash
+
+
+def nick_to_pk_hash(nick):
+    if nick in rev_nicks:
+        return rev_nicks[nick]
+    return nick
+
+
+def add_nick(nick, pk_hash):
+    nicks[pk_hash] = nick
+    rev_nicks[nick] = pk_hash
+
+
+def print_nicks():
+    print(nicks)
 
 
 def shutdown():
@@ -201,7 +226,10 @@ command_list = {
     '/sessions': print_sessions,
     '/exit': shutdown,
     '/m': send_message,
-    '/c': close_session
+    '/c': close_session,
+    '/nick': add_nick,
+    '/n': add_nick,
+    '/nicks': print_nicks
 }
 
 
@@ -211,7 +239,7 @@ if __name__ == '__main__':
     parser.add_argument('certfile', help='certificate to use for connections')
     parser.add_argument('--host', help='address to connect to or listen on', default='127.0.0.1')
     parser.add_argument('--port', help='port to connect to or listen on', type=int, default=8525)
-    parser.add_argument('--server', help='run in server mode', action='store_true')
+    parser.add_argument('--nicks', help='file of nicknames to load')
 
     args = parser.parse_args()
 
@@ -222,6 +250,13 @@ if __name__ == '__main__':
     if not os.path.exists(args.certfile):
         print('Certfile not found')
         exit()
+
+    if args.nicks:
+        if os.path.exists(args.nicks):
+            with open(args.nicks, 'r') as f:
+                for pair in json.loads(f.read()).items():
+                    nicks[pair[0]] = pair[1]
+                    rev_nicks[pair[1]] = pair[0]
 
     keyfile = args.keyfile
     certfile = args.certfile
