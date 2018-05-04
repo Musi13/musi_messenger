@@ -49,6 +49,9 @@ def connect_to_peer(peer):
     else:
         #print('Connecting to {0}'.format(pk_hash))
         d = json.loads(r.text)  # JSON with {host: , port: }
+
+        # TODO: Refactor this to allow connecting to IP & Port; using whatever
+        # key you get (no authentication)
         sock = connect_to_host_port(d['host'], int(d['port']))
 
         # At this point, we have an encrypted connection to the

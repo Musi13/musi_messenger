@@ -35,10 +35,10 @@ def get_pub_key_from_transfer(b64_der):
     return key
 
 def get_signed_transfer(priv_key, pub_key):
-    '''
+    """
     Signs the pub_key with the priv_key
     Priv should be the local key, pub is the remote
-    '''
+    """
     return priv_key.sign(
         pub_key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo),
         asymmetric.padding.PSS(asymmetric.padding.MGF1(hashes.SHA256()), asymmetric.padding.PSS.MAX_LENGTH),

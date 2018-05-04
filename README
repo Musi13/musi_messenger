@@ -1,0 +1,36 @@
+Musi Messenger is a peer to peer secure messaging system.
+
+The idea is that each client runs a server to accept incoming connections from
+other clients. Each client connects over TLS to secure the connection, then
+authenticates by signing a hash of the peer's public key with their own private key.
+This should* ensure that each client is communicating with the owner of the public
+key it is presented. (ie. guarantee the partner has the private key for the public
+key they have presented).
+
+The only central server component resolves public key hashes to IPs and ports.
+Clients can send a POST to the server to update their hash mapping, or a GET
+to get the mapping for any hash.
+
+Disclaimer:
+I wrote this in the span of a few hours, so there are definitely bugs, and I would
+not suggest using this if you actually need encrypted communication. The main purpose
+of this project was a proof of concept to find how much work would be required
+for an open source, peer to peer, secure messaging protocol. The main goal is
+to guarantee confidentiality, integrity, and authenticity for every message without
+having to trust a 3rd party (like Facebook, WhatsApp, or another "end to end secure"
+messenger that has closed source).
+
+There is more to do with this project to get it into a functional state (noted
+by the various TODO comments) such as authentication on registering hashes server
+side (should still be secure because auth is p2p, but potential for DOS) or connecting
+to IP:port and bypassing the resolution server entirely.
+
+Usage:
+# Use python3
+python mm_server.py
+python mm_client <keyfile> <certfile>
+
+There are 2 sets of credentials included; note that the certificates are only
+used to create the SSL socket and are ignored by both client and server code.
+Also, the current server code runs exclusively on localhost, so change that
+if you're trying to work with multiple hosts.
